@@ -146,9 +146,7 @@ struct IncidentDetailView: View {
 
     private var bodyMapSection: some View {
         SectionCard(title: "Body Map", icon: "figure.stand", iconColor: .ncPrimary) {
-            // Read-only body map showing placed dots
             ReadOnlyBodyMapView(dots: report.bodyMapDots)
-                .frame(height: 200)
         }
     }
 
@@ -263,61 +261,4 @@ private struct DetailRow: View {
     }
 }
 
-/// Non-interactive body map for detail view display.
-private struct ReadOnlyBodyMapView: View {
-    let dots: [BodyMapDot]
-
-    @State private var activeSide: String = "front"
-
-    private var visibleDots: [BodyMapDot] { dots.filter { $0.side == activeSide } }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Picker("", selection: $activeSide) {
-                Text("Front").tag("front")
-                Text("Back").tag("back")
-            }
-            .pickerStyle(.segmented)
-
-            GeometryReader { geo in
-                ZStack {
-                    BodyOutlineShape(side: activeSide)
-                        .fill(Color.ncPrimary.opacity(0.06))
-                    BodyOutlineShape(side: activeSide)
-                        .stroke(Color.ncPrimary.opacity(0.7), lineWidth: 1.5)
-
-                    ForEach(visibleDots) { dot in
-                        Circle()
-                            .fill(Color.ncDanger)
-                            .frame(width: 12, height: 12)
-                            .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                            .position(x: dot.x * geo.size.width, y: dot.y * geo.size.height)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Re-export the body outline shape for read-only use.
-private struct BodyOutlineShape: Shape {
-    let side: String
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width; let h = rect.height
-        func x(_ n: Double) -> CGFloat { CGFloat(n) * w }
-        func y(_ n: Double) -> CGFloat { CGFloat(n) * h }
-        path.addEllipse(in: CGRect(x: x(0.41), y: y(0.01), width: x(0.18), height: y(0.18)))
-        path.addRect(CGRect(x: x(0.45), y: y(0.19), width: x(0.10), height: y(0.06)))
-        path.addRoundedRect(in: CGRect(x: x(0.32), y: y(0.25), width: x(0.36), height: y(0.30)), cornerSize: .init(width: 8, height: 6))
-        path.addRoundedRect(in: CGRect(x: x(0.18), y: y(0.25), width: x(0.13), height: y(0.20)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.14), y: y(0.46), width: x(0.12), height: y(0.19)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.69), y: y(0.25), width: x(0.13), height: y(0.20)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.74), y: y(0.46), width: x(0.12), height: y(0.19)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.33), y: y(0.56), width: x(0.15), height: y(0.22)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.33), y: y(0.79), width: x(0.14), height: y(0.19)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.52), y: y(0.56), width: x(0.15), height: y(0.22)), cornerSize: .init(width: 6, height: 4))
-        path.addRoundedRect(in: CGRect(x: x(0.53), y: y(0.79), width: x(0.14), height: y(0.19)), cornerSize: .init(width: 6, height: 4))
-        return path
-    }
-}
+// ReadOnlyBodyMapView and BodySilhouette are defined in BodyMapView.swift
