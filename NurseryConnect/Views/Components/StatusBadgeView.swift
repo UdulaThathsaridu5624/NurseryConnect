@@ -23,10 +23,10 @@ struct StatusBadgeView: View {
             Text(status.displayName)
                 .font(.caption.weight(.semibold))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(badgeColor)
         .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(badgeColor, in: Capsule())
+        .padding(.vertical, 5)
+        .background(badgeColor.opacity(0.14), in: Capsule())
         .accessibilityLabel("Status: \(status.displayName)")
     }
 }
