@@ -1,0 +1,13 @@
+# Xcode user-specific state (changes every session, causes merge noise)
+*.xcuserstate
+xcuserdata/
+
+# Scheme management (auto-generated ordering, not meaningful)
+xcschememanagement.plist
+
+# Build output
+DerivedData/
+build/
+
+# macOS
+.DS_Store
