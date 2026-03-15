@@ -1,13 +1,14 @@
 // BodyMapView.swift — NurseryConnect
 // Interactive front/back body-outline diagram with tap-to-place injury markers.
-// Body outline is drawn using Canvas with simplified geometric shapes.
-// Markers are stored as normalised (0-1) coordinates and encoded to JSON.
 
 import SwiftUI
+
+// MARK: - Interactive body map (used in NewIncidentReportView)
 
 struct BodyMapView: View {
     @Binding var dots: [BodyMapDot]
     @State private var activeSide: String = "front"
+    @State private var pulse = false
 
     private var visibleDots: [BodyMapDot] { dots.filter { $0.side == activeSide } }
 
@@ -20,67 +21,112 @@ struct BodyMapView: View {
             .pickerStyle(.segmented)
 
             ZStack {
-                // Body diagram
+                // Dot-grid background
+                Canvas { ctx, size in
+                    let spacing: CGFloat = 20
+                    var col: CGFloat = spacing
+                    while col < size.width {
+                        var row: CGFloat = spacing
+                        while row < size.height {
+                            let dot = Path(ellipseIn: CGRect(x: col - 1, y: row - 1, width: 2, height: 2))
+                            ctx.fill(dot, with: .color(Color.ncPrimary.opacity(0.06)))
+                            row += spacing
+                        }
+                        col += spacing
+                    }
+                }
+
                 GeometryReader { geo in
                     ZStack {
-                        // Filled body silhouette
-                        BodyOutlineCanvas(side: activeSide)
-                            .fill(Color.ncPrimary.opacity(0.06))
+                        // Body silhouette — warm fill
+                        BodySilhouette(side: activeSide)
+                            .fill(Color(red: 0.97, green: 0.90, blue: 0.84).opacity(0.85))
 
-                        // Stroked body outline (separate layer — can't chain .fill after .stroke on Shape)
-                        BodyOutlineCanvas(side: activeSide)
-                            .stroke(Color.ncPrimary.opacity(0.7), lineWidth: 1.5)
+                        // Silhouette outline
+                        BodySilhouette(side: activeSide)
+                            .stroke(Color.ncPrimary.opacity(0.50), lineWidth: 1.6)
 
-                        // Tap overlay for placing / removing markers
+                        // Body zone labels
+                        Canvas { ctx, size in
+                            let labels: [(String, Double, Double)] = [
+                                ("Head",   0.50, 0.08),
+                                ("Torso",  0.50, 0.38),
+                                ("L Arm",  0.16, 0.37),
+                                ("R Arm",  0.84, 0.37),
+                                ("L Leg",  0.38, 0.72),
+                                ("R Leg",  0.62, 0.72),
+                            ]
+                            for (label, nx, ny) in labels {
+                                let pt = CGPoint(x: nx * size.width, y: ny * size.height)
+                                let text = Text(label)
+                                    .font(.system(size: 7.5, weight: .medium))
+                                    .foregroundStyle(Color.ncSecondary.opacity(0.7))
+                                ctx.draw(text, at: pt, anchor: .center)
+                            }
+                        }
+                        .allowsHitTesting(false)
+
+                        // Tap gesture to place / remove markers
                         Color.clear
                             .contentShape(Rectangle())
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onEnded { value in
-                                        let x = value.location.x / geo.size.width
-                                        let y = value.location.y / geo.size.height
-                                        guard x >= 0, x <= 1, y >= 0, y <= 1 else { return }
+                                        let nx = value.location.x / geo.size.width
+                                        let ny = value.location.y / geo.size.height
                                         let threshold = 0.06
                                         if let idx = dots.firstIndex(where: {
                                             $0.side == activeSide &&
-                                            abs($0.x - x) < threshold &&
-                                            abs($0.y - y) < threshold
+                                            abs($0.x - nx) < threshold &&
+                                            abs($0.y - ny) < threshold
                                         }) {
-                                            withAnimation(.spring(duration: 0.2)) {
-                                                dots.remove(at: idx)
-                                            }
+                                            withAnimation(.spring(duration: 0.2)) { dots.remove(at: idx) }
                                         } else {
                                             withAnimation(.spring(duration: 0.3)) {
-                                                dots.append(BodyMapDot(x: x, y: y, side: activeSide))
+                                                dots.append(BodyMapDot(x: nx, y: ny, side: activeSide))
                                             }
                                         }
                                     }
                             )
 
-                        // Injury markers — allowsHitTesting(false) so taps pass through to gesture layer
+                        // Injury markers with pulse ring
                         ForEach(visibleDots) { dot in
-                            Circle()
-                                .fill(Color.ncDanger)
-                                .frame(width: 14, height: 14)
-                                .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                                .shadow(color: .black.opacity(0.25), radius: 3)
-                                .position(
-                                    x: dot.x * geo.size.width,
-                                    y: dot.y * geo.size.height
-                                )
-                                .allowsHitTesting(false)
-                                .transition(.scale.combined(with: .opacity))
+                            ZStack {
+                                Circle()
+                                    .fill(Color.ncDanger.opacity(0.25))
+                                    .frame(width: 22, height: 22)
+                                    .scaleEffect(pulse ? 1.4 : 1.0)
+                                Circle()
+                                    .fill(Color.ncDanger)
+                                    .frame(width: 12, height: 12)
+                                    .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                                    .shadow(color: Color.ncDanger.opacity(0.4), radius: 3)
+                            }
+                            .position(x: dot.x * geo.size.width, y: dot.y * geo.size.height)
+                            .allowsHitTesting(false)
+                            .transition(.scale.combined(with: .opacity))
                         }
                     }
                 }
             }
-            .frame(height: 260)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .accessibilityLabel("Body map diagram. Tap to mark injury locations. \(visibleDots.count) markers on \(activeSide) view.")
+            .frame(height: 280)
+            .background(Color.ncCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.ncPrimary.opacity(0.12), lineWidth: 1)
+            )
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+            .accessibilityLabel("Body map. Tap to mark injury locations. \(visibleDots.count) marker\(visibleDots.count == 1 ? "" : "s") on \(activeSide).")
 
+            // Footer hint / marker count
             if !dots.isEmpty {
                 HStack {
-                    Label("\(dots.count) marker\(dots.count == 1 ? "" : "s") placed", systemImage: "circle.fill")
+                    Label("\(dots.count) marker\(dots.count == 1 ? "" : "s") placed",
+                          systemImage: "circle.fill")
                         .font(.caption)
                         .foregroundStyle(.ncDanger)
                     Spacer()
@@ -91,7 +137,7 @@ struct BodyMapView: View {
                     .foregroundStyle(.ncDanger)
                 }
             } else {
-                Text("Tap the body outline to mark injury locations. Tap again to remove.")
+                Text("Tap the body outline to mark injury locations. Tap a marker to remove it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -100,85 +146,162 @@ struct BodyMapView: View {
     }
 }
 
-// MARK: - Body outline shape
+// MARK: - Read-only body map (used in IncidentDetailView)
 
-/// Draws a simplified front or back body outline using a single composite Path.
-/// Coordinates are normalised to a unit square (0–1 × 0–1) and scaled by the canvas size.
-private struct BodyOutlineCanvas: Shape {
-    let side: String  // "front" or "back"
+struct ReadOnlyBodyMapView: View {
+    let dots: [BodyMapDot]
+    @State private var activeSide: String = "front"
+
+    private var visibleDots: [BodyMapDot] { dots.filter { $0.side == activeSide } }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Picker("", selection: $activeSide) {
+                Text("Front").tag("front")
+                Text("Back").tag("back")
+            }
+            .pickerStyle(.segmented)
+
+            ZStack {
+                Canvas { ctx, size in
+                    let spacing: CGFloat = 20
+                    var col: CGFloat = spacing
+                    while col < size.width {
+                        var row: CGFloat = spacing
+                        while row < size.height {
+                            let dot = Path(ellipseIn: CGRect(x: col - 1, y: row - 1, width: 2, height: 2))
+                            ctx.fill(dot, with: .color(Color.ncPrimary.opacity(0.06)))
+                            row += spacing
+                        }
+                        col += spacing
+                    }
+                }
+
+                GeometryReader { geo in
+                    ZStack {
+                        BodySilhouette(side: activeSide)
+                            .fill(Color(red: 0.97, green: 0.90, blue: 0.84).opacity(0.85))
+                        BodySilhouette(side: activeSide)
+                            .stroke(Color.ncPrimary.opacity(0.50), lineWidth: 1.6)
+
+                        Canvas { ctx, size in
+                            let labels: [(String, Double, Double)] = [
+                                ("Head",   0.50, 0.08),
+                                ("Torso",  0.50, 0.38),
+                                ("L Arm",  0.16, 0.37),
+                                ("R Arm",  0.84, 0.37),
+                                ("L Leg",  0.38, 0.72),
+                                ("R Leg",  0.62, 0.72),
+                            ]
+                            for (label, nx, ny) in labels {
+                                let pt = CGPoint(x: nx * size.width, y: ny * size.height)
+                                let text = Text(label)
+                                    .font(.system(size: 7.5, weight: .medium))
+                                    .foregroundStyle(Color.ncSecondary.opacity(0.7))
+                                ctx.draw(text, at: pt, anchor: .center)
+                            }
+                        }
+
+                        ForEach(visibleDots) { dot in
+                            Circle()
+                                .fill(Color.ncDanger)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                                .shadow(color: Color.ncDanger.opacity(0.4), radius: 2)
+                                .position(x: dot.x * geo.size.width, y: dot.y * geo.size.height)
+                        }
+                    }
+                }
+            }
+            .frame(height: 200)
+            .background(Color.ncCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.ncPrimary.opacity(0.12), lineWidth: 1)
+            )
+        }
+    }
+}
+
+// MARK: - Shared body silhouette shape
+
+/// Connected human figure. Segments overlap slightly so there are no visible
+/// gaps between head/neck/torso/limbs — giving a unified silhouette.
+struct BodySilhouette: Shape {
+    let side: String
 
     func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-
+        var p = Path()
+        let w = rect.width, h = rect.height
         func x(_ n: Double) -> CGFloat { CGFloat(n) * w }
         func y(_ n: Double) -> CGFloat { CGFloat(n) * h }
+        func sz(_ nw: Double, _ nh: Double) -> CGSize { CGSize(width: x(nw), height: y(nh)) }
 
-        // Head
-        let headCX = x(0.5), headCY = y(0.1), headR = x(0.09)
-        path.addEllipse(in: CGRect(x: headCX - headR, y: headCY - headR,
-                                    width: headR * 2, height: headR * 2))
+        // Head — overlaps neck top
+        p.addEllipse(in: CGRect(x: x(0.41), y: y(0.01), width: x(0.18), height: y(0.19)))
 
-        // Neck
-        path.addRect(CGRect(x: x(0.45), y: y(0.19), width: x(0.10), height: y(0.06)))
-
-        // Torso
-        path.addRoundedRect(
-            in: CGRect(x: x(0.32), y: y(0.25), width: x(0.36), height: y(0.30)),
-            cornerSize: CGSize(width: x(0.04), height: y(0.03))
+        // Neck — overlaps head bottom and torso top
+        p.addRoundedRect(
+            in: CGRect(x: x(0.455), y: y(0.17), width: x(0.09), height: y(0.10)),
+            cornerSize: sz(0.02, 0.015)
         )
 
-        // Left upper arm
-        path.addRoundedRect(
-            in: CGRect(x: x(0.18), y: y(0.25), width: x(0.13), height: y(0.20)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        // Torso — wider, overlaps limb tops
+        p.addRoundedRect(
+            in: CGRect(x: x(0.30), y: y(0.24), width: x(0.40), height: y(0.32)),
+            cornerSize: sz(0.05, 0.04)
+        )
+
+        // Left upper arm (extends into torso edge)
+        p.addRoundedRect(
+            in: CGRect(x: x(0.16), y: y(0.24), width: x(0.15), height: y(0.22)),
+            cornerSize: sz(0.04, 0.03)
         )
         // Left forearm
-        path.addRoundedRect(
-            in: CGRect(x: x(0.14), y: y(0.46), width: x(0.12), height: y(0.19)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.13), y: y(0.44), width: x(0.13), height: y(0.21)),
+            cornerSize: sz(0.04, 0.03)
         )
 
         // Right upper arm
-        path.addRoundedRect(
-            in: CGRect(x: x(0.69), y: y(0.25), width: x(0.13), height: y(0.20)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.69), y: y(0.24), width: x(0.15), height: y(0.22)),
+            cornerSize: sz(0.04, 0.03)
         )
         // Right forearm
-        path.addRoundedRect(
-            in: CGRect(x: x(0.74), y: y(0.46), width: x(0.12), height: y(0.19)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.74), y: y(0.44), width: x(0.13), height: y(0.21)),
+            cornerSize: sz(0.04, 0.03)
         )
 
-        // Left thigh
-        path.addRoundedRect(
-            in: CGRect(x: x(0.33), y: y(0.56), width: x(0.15), height: y(0.22)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        // Left thigh (top overlaps torso bottom)
+        p.addRoundedRect(
+            in: CGRect(x: x(0.31), y: y(0.53), width: x(0.17), height: y(0.24)),
+            cornerSize: sz(0.04, 0.03)
         )
         // Left lower leg
-        path.addRoundedRect(
-            in: CGRect(x: x(0.33), y: y(0.79), width: x(0.14), height: y(0.19)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.32), y: y(0.75), width: x(0.15), height: y(0.22)),
+            cornerSize: sz(0.04, 0.03)
         )
 
         // Right thigh
-        path.addRoundedRect(
-            in: CGRect(x: x(0.52), y: y(0.56), width: x(0.15), height: y(0.22)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.52), y: y(0.53), width: x(0.17), height: y(0.24)),
+            cornerSize: sz(0.04, 0.03)
         )
         // Right lower leg
-        path.addRoundedRect(
-            in: CGRect(x: x(0.53), y: y(0.79), width: x(0.14), height: y(0.19)),
-            cornerSize: CGSize(width: x(0.03), height: y(0.02))
+        p.addRoundedRect(
+            in: CGRect(x: x(0.53), y: y(0.75), width: x(0.15), height: y(0.22)),
+            cornerSize: sz(0.04, 0.03)
         )
 
-        // Back-specific: add spine marker line
+        // Back view: spine indicator
         if side == "back" {
-            path.move(to: CGPoint(x: x(0.50), y: y(0.26)))
-            path.addLine(to: CGPoint(x: x(0.50), y: y(0.55)))
+            p.move(to: CGPoint(x: x(0.50), y: y(0.27)))
+            p.addLine(to: CGPoint(x: x(0.50), y: y(0.54)))
         }
 
-        return path
+        return p
     }
 }
