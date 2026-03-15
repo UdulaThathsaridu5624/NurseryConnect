@@ -21,46 +21,50 @@ struct IncidentListView: View {
             if reports.isEmpty {
                 emptyState
             } else {
-                List {
-                    // Filter bar
-                    Section {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                FilterChip(label: "All", isSelected: filterStatus == nil) {
-                                    withAnimation { filterStatus = nil }
-                                }
-                                ForEach(IncidentStatus.allCases, id: \.rawValue) { status in
-                                    FilterChip(label: status.displayName, isSelected: filterStatus == status) {
-                                        withAnimation { filterStatus = (filterStatus == status) ? nil : status }
+                VStack(spacing: 0) {
+                    // Filter bar — sits above the scroll list with proper margin
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            FilterChip(label: "All", isSelected: filterStatus == nil) {
+                                withAnimation(.spring(duration: 0.25)) { filterStatus = nil }
+                            }
+                            ForEach(IncidentStatus.allCases, id: \.rawValue) { status in
+                                FilterChip(label: status.displayName, isSelected: filterStatus == status) {
+                                    withAnimation(.spring(duration: 0.25)) {
+                                        filterStatus = (filterStatus == status) ? nil : status
                                     }
                                 }
                             }
-                            .padding(.vertical, 4)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                     }
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                    .listRowBackground(Color.ncBackground)
 
-                    if filteredReports.isEmpty {
-                        Text("No incidents match the selected filter.")
-                            .foregroundStyle(.secondary)
-                            .font(.subheadline)
-                            .listRowBackground(Color.ncBackground)
-                    } else {
-                        ForEach(filteredReports) { report in
-                            NavigationLink(value: report) {
-                                IncidentRowView(report: report)
+                    Divider()
+
+                    // Incident rows
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            if filteredReports.isEmpty {
+                                Text("No incidents match the selected filter.")
+                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.top, 40)
+                            } else {
+                                ForEach(filteredReports) { report in
+                                    NavigationLink(value: report) {
+                                        IncidentRowView(report: report)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .listRowBackground(Color.ncBackground)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                     }
                 }
-                .listStyle(.plain)
                 .background(Color.ncBackground)
-                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("Incidents")
@@ -107,38 +111,49 @@ struct IncidentListView: View {
 struct IncidentRowView: View {
     let report: IncidentReport
 
+    private var iconColor: Color { report.category.isSevere ? .ncDanger : .ncWarning }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Title row: icon circle + category name
+            HStack(spacing: 10) {
                 Image(systemName: report.category.icon)
-                    .foregroundStyle(report.category.isSevere ? .ncDanger : .ncWarning)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 34, height: 34)
+                    .background(iconColor.opacity(0.12), in: Circle())
+
                 Text(report.category.displayName)
                     .font(.subheadline.weight(.semibold))
+
                 Spacer()
-                StatusBadgeView(status: report.status)
             }
 
+            // Child name
             if let child = report.child {
                 Label(child.fullName, systemImage: "person.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
+            // Description preview
             Text(report.descriptionText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            HStack {
+            // Footer: date + status badge on same row
+            HStack(alignment: .center) {
                 Text(report.createdAt, style: .date)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                Spacer()
                 if report.requiresOfstedNotification {
-                    Label("Ofsted notification required", systemImage: "exclamationmark.circle.fill")
+                    Label("Ofsted", systemImage: "exclamationmark.circle.fill")
                         .font(.caption2)
                         .foregroundStyle(.ncDanger)
                 }
+                Spacer()
+                StatusBadgeView(status: report.status)
             }
         }
         .padding(14)
@@ -156,12 +171,12 @@ private struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.caption.weight(isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .font(.caption.weight(isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? Color.white : Color.ncPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
                 .background(
-                    Capsule().fill(isSelected ? Color.ncDanger : Color(.systemGray5))
+                    Capsule().fill(isSelected ? Color.ncDanger : Color.ncPrimary.opacity(0.10))
                 )
         }
         .buttonStyle(.plain)

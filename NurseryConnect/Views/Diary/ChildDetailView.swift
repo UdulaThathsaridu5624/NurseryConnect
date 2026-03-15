@@ -106,7 +106,7 @@ struct ChildDetailView: View {
 
     private var quickLogSection: some View {
         SectionCard(title: "Quick Log", icon: "plus.circle.fill", iconColor: .ncPrimary) {
-            HStack(spacing: 0) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
                 ForEach(DiaryEntryType.allCases, id: \.rawValue) { type in
                     QuickLogButton(type: type) {
                         selectedType = type
